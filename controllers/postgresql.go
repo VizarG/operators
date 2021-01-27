@@ -17,9 +17,11 @@ limitations under the License.
 package controllers
 
 import (
+	"context"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 
@@ -153,4 +155,24 @@ func (r *MemcachedReconciler) postgresqlDeployment(m *examplecomv1alpha1.Memcach
 
 	ctrl.SetControllerReference(m, deppostgres, r.Scheme)
 	return deppostgres
+}
+
+// Returns whether or not the Postgraql deployment is running
+func (r *MemcachedReconciler) isPostgresqlUp(m *examplecomv1alpha1.Memcached) bool {
+	deployment := &appsv1.Deployment{}
+	// test1 := "test variable"
+	err := r.Client.Get(context.TODO(), types.NamespacedName{
+		Name:      postgresqlDeploymentName(m),
+		Namespace: m.Namespace,
+	}, deployment)
+
+	if err != nil {
+		log.Error(err, "Deployment of postgresql is not found")
+		return false
+	}
+
+	if deployment.Status.ReadyReplicas == 1 {
+		return true
+	}
+	return false
 }

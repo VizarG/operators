@@ -18,8 +18,11 @@ package controllers
 
 import (
 	"context"
-	// "time"
+	"fmt"
 	"reflect"
+	"time"
+
+	// "github.com/jinzhu/copier"
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
@@ -69,54 +72,40 @@ type MemcachedReconciler struct {
 
 func (r *MemcachedReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	ctx = context.Background()
-	_ = r.Log.WithValues("memcached", req.NamespacedName)
+	// _ = r.Log.WithValues("memcached", req.NamespacedName)
+	log := r.Log.WithValues("memcached", req.NamespacedName)
 	logf.Log.WithName("start reconcile")
 
 	// Watch for changes to primary resource WordPress
 	memcached := &examplecomv1alpha1.Memcached{}
-	err := r.Client.Get(context.TODO(), req.NamespacedName, memcached)
+	err := r.Get(ctx, req.NamespacedName, memcached)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
-			logf.Log.WithName("there is no errors")
+			log.Info("Memcached resource not found. Ignoring since object must be deleted")
 			return ctrl.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
-		logf.Log.WithName("Failed to get Memcached")
-		return ctrl.Result{}, nil
+		log.Error(err, "Failed to get Memcached")
+		// return ctrl.Result{}, err
 	}
 
 	// Check if the deployment already exists, if not create a new one
 	found := &appsv1.Deployment{}
-	err = r.Get(ctx, types.NamespacedName{Name: memcached.Name, Namespace: memcached.Namespace}, found)
+	err = r.Get(ctx, types.NamespacedName{Name: frontenDeploymentName(memcached), Namespace: memcached.Namespace}, found)
+	log.Info("new iteration")
 
 	if err != nil && errors.IsNotFound(err) {
+		//					NGINX
 		// Define a new deployment of nginx
-		dep := r.deploymentForNginx(memcached)
-		log.Info("Creating a new Deployment", "Deployment.Namespace", dep.Namespace, "Deployment.Name", dep.Name)
-		err = r.Create(ctx, dep)
+		depnginx := r.deploymentForNginx(memcached)
+		fmt.Println("depnginx = ", reflect.TypeOf(depnginx))
+		log.Info("Creating a new Deployment", "Deployment.Namespace", depnginx.Namespace, "Deployment.Name", depnginx.Name)
+		err = r.Create(ctx, depnginx)
 		if err != nil {
-			log.Error(err, "Failed to create new Deployment", "Deployment.Namespace", dep.Namespace, "Deployment.Name", dep.Name)
-			return ctrl.Result{}, err
-		}
-
-		// Define a new deployment of postgresql
-		depPostgres := r.postgresqlDeployment(memcached)
-		log.Info("Creating a new Deployment", "Deployment.Namespace", depPostgres.Namespace, "Deployment.Name", depPostgres.Name)
-		err = r.Create(ctx, depPostgres)
-		if err != nil {
-			log.Error(err, "Failed to create new Deployment", "Deployment.Namespace", depPostgres.Namespace, "Deployment.Name", depPostgres.Name)
-			return ctrl.Result{}, err
-		}
-
-		// Define a new deployment of pgadmin4
-		depPgamin := r.pgadminDeploymentName(memcached)
-		log.Info("Creating a new Deployment", "Deployment.Namespace", depPgamin.Namespace, "Deployment.Name", depPgamin.Name)
-		err = r.Create(ctx, depPgamin)
-		if err != nil {
-			log.Error(err, "Failed to create new Deployment", "Deployment.Namespace", depPgamin.Namespace, "Deployment.Name", depPgamin.Name)
+			log.Error(err, "Failed to create new Deployment", "Deployment.Namespace", depnginx.Namespace, "Deployment.Name", depnginx.Name)
 			return ctrl.Result{}, err
 		}
 
@@ -138,30 +127,13 @@ func (r *MemcachedReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			return ctrl.Result{}, err
 		}
 
-		//  Define new pgadmin service
-		servpgadmin := r.pgadminServiceName(memcached)
-		log.Info("Creating a new Deployment", "Deployment.Namespace", servpgadmin.Namespace, "Deployment.Name", servpgadmin.Name)
-		err = r.Create(ctx, servpgadmin)
+		//						POSTGRES
+		// Define a new deployment of postgresql
+		depPostgres := r.postgresqlDeployment(memcached)
+		log.Info("Creating a new Deployment", "Deployment.Namespace", depPostgres.Namespace, "Deployment.Name", depPostgres.Name)
+		err = r.Create(ctx, depPostgres)
 		if err != nil {
-			log.Error(err, "Failed to create new Deployment", "Deployment.Namespace", servpgadmin.Namespace, "Deployment.Name", servpgadmin.Name)
-			return ctrl.Result{}, err
-		}
-
-		//  Define new pgadmin secret
-		secretpgadmin := r.postgresqlSecret(memcached)
-		log.Info("Creating a new secretpgadmin", "Deployment.Namespace", secretpgadmin.Namespace, "Deployment.Name", secretpgadmin.Name)
-		err = r.Create(ctx, secretpgadmin)
-		if err != nil {
-			log.Error(err, "Failed to create new Deployment", "Deployment.Namespace", secretpgadmin.Namespace, "Deployment.Name", secretpgadmin.Name)
-			return ctrl.Result{}, err
-		}
-
-		//  Define new postgresql secret
-		secretpostgres := r.pgadminSecret(memcached)
-		log.Info("Creating a new secretpgadmin", "Deployment.Namespace", secretpostgres.Namespace, "Deployment.Name", secretpostgres.Name)
-		err = r.Create(ctx, secretpostgres)
-		if err != nil {
-			log.Error(err, "Failed to create new Deployment", "Deployment.Namespace", secretpostgres.Namespace, "Deployment.Name", secretpostgres.Name)
+			log.Error(err, "Failed to create new Deployment", "Deployment.Namespace", depPostgres.Namespace, "Deployment.Name", depPostgres.Name)
 			return ctrl.Result{}, err
 		}
 
@@ -171,6 +143,55 @@ func (r *MemcachedReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		err = r.Create(ctx, servpostgres)
 		if err != nil {
 			log.Error(err, "Failed to create new Deployment", "Deployment.Namespace", servpostgres.Namespace, "Deployment.Name", servpostgres.Name)
+			return ctrl.Result{}, err
+		}
+
+		//  Define new postgresql secret
+		secretpostgres := r.postgresqlSecret(memcached)
+		log.Info("Creating a new secretpostgres", "Deployment.Namespace", secretpostgres.Namespace, "Deployment.Name", secretpostgres.Name)
+		err = r.Create(ctx, secretpostgres)
+		if err != nil {
+			log.Error(err, "Failed to create new Deployment", "Deployment.Namespace", secretpostgres.Namespace, "Deployment.Name", secretpostgres.Name)
+			return ctrl.Result{}, err
+		}
+
+		postgresqlRunning := r.isPostgresqlUp(memcached)
+
+		for postgresqlRunning != true {
+			if postgresqlRunning {
+				log.Info("Postgresql is running now")
+			} else {
+				time.Sleep(3 * time.Second)
+				postgresqlRunning = r.isPostgresqlUp(memcached)
+				log.Info(fmt.Sprintf("Postgresql isn't running, state is %v", postgresqlRunning))
+			}
+		}
+
+		//				PGADMIN
+		// Define a new deployment of pgadmin4
+		depPgamin := r.pgadminDeploymentName(memcached)
+		log.Info("Creating a new Deployment", "Deployment.Namespace", depPgamin.Namespace, "Deployment.Name", depPgamin.Name)
+		err = r.Create(ctx, depPgamin)
+		if err != nil {
+			log.Error(err, "Failed to create new Deployment", "Deployment.Namespace", depPgamin.Namespace, "Deployment.Name", depPgamin.Name)
+			return ctrl.Result{}, err
+		}
+
+		//  Define new pgadmin secret
+		secretpgadmin := r.pgadminSecret(memcached)
+		log.Info("Creating a new secretpgadmin", "Deployment.Namespace", secretpgadmin.Namespace, "Deployment.Name", secretpgadmin.Name)
+		err = r.Create(ctx, secretpgadmin)
+		if err != nil {
+			log.Error(err, "Failed to create new Deployment", "Deployment.Namespace", secretpgadmin.Namespace, "Deployment.Name", secretpgadmin.Name)
+			return ctrl.Result{}, err
+		}
+
+		//  Define new pgadmin service
+		servpgadmin := r.pgadminServiceName(memcached)
+		log.Info("Creating a new Deployment", "Deployment.Namespace", servpgadmin.Namespace, "Deployment.Name", servpgadmin.Name)
+		err = r.Create(ctx, servpgadmin)
+		if err != nil {
+			log.Error(err, "Failed to create new Deployment", "Deployment.Namespace", servpgadmin.Namespace, "Deployment.Name", servpgadmin.Name)
 			return ctrl.Result{}, err
 		}
 
@@ -217,25 +238,6 @@ func (r *MemcachedReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	}
 
-	// // Check if the service already exists
-	// found_service := &corev1.Service{}
-	// err = r.Get(ctx, types.NamespacedName{Name: memcached.Name, Namespace: memcached.Namespace}, found_service)
-	// if err != nil && errors.IsNotFound(err) {
-	// 	// Define a new deployment
-	// 	dep := r.frontendService(memcached)
-	// 	log.Info("Creating a new Deployment", "Deployment.Namespace", dep.Namespace, "Deployment.Name", dep.Name)
-	// 	err = r.Create(ctx, dep)
-	// 	if err != nil {
-	// 		log.Error(err, "Failed to create new Deployment", "Deployment.Namespace", dep.Namespace, "Deployment.Name", dep.Name)
-	// 		return ctrl.Result{}, err
-	// 	}
-	// 	// Deployment created successfully - return and requeue
-	// 	return ctrl.Result{Requeue: true}, nil
-	// } else if err != nil {
-	// 	log.Error(err, "Failed to get Deployment")
-	// 	return ctrl.Result{}, err
-	// }
-
 	return ctrl.Result{}, nil
 }
 
@@ -244,6 +246,7 @@ func (r *MemcachedReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&examplecomv1alpha1.Memcached{}).
 		Owns(&appsv1.Deployment{}).
+		Owns(&corev1.Service{}).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: 1,
 		}).
@@ -264,3 +267,25 @@ func getPodNames(pods []corev1.Pod) []string {
 	}
 	return podNames
 }
+
+//
+// func test(t interface{}) (r *MemcachedReconciler) {
+// 	switch reflect.TypeOf(t).Kind() {
+// 	case reflect.Slice:
+// 		s := reflect.ValueOf(t)
+//
+// 		for i := 0; i < s.Len(); i++ {
+//
+// 			// create all resources
+// 			log.Info("Creating a new Deployment", "Deployment.Namespace", "Deployment.Name")
+// 			// err = r.Create(ctx, &&v)
+// 			if err != nil {
+// 				log.Error(err, "Failed to create new Deployment", "Deployment.Namespace", "Deployment.Name")
+// 				return ctrl.Result{}, err
+// 			}
+//
+// 			fmt.Println(s.Index(i))
+// 		}
+// 	}
+// 	return i
+// }
