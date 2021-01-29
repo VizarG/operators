@@ -33,7 +33,7 @@ func pgadminServiceName(m *examplecomv1alpha1.Memcached) string {
 
 func (r *MemcachedReconciler) pgadminServiceName(m *examplecomv1alpha1.Memcached) *corev1.Service {
 	// var ls = map[string]string{"app": "pgadmin"}
-	ls := labels("pgadmin")
+	ls := labels(m, "pgadmin")
 
 	s := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -84,8 +84,8 @@ func pgadminDeploymentName(m *examplecomv1alpha1.Memcached) string {
 }
 
 func (r *MemcachedReconciler) pgadminDeploymentName(m *examplecomv1alpha1.Memcached) *appsv1.Deployment {
-	ls := labels("pgadmin")
-	replicas := m.Spec.Size
+	ls := labels(m, "pgadmin")
+	replicas := int32(1)
 
 	userSecret := corev1.EnvVarSource{
 		SecretKeyRef: &corev1.SecretKeySelector{

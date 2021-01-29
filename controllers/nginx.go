@@ -17,9 +17,11 @@ limitations under the License.
 package controllers
 
 import (
+	"context"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 
@@ -84,7 +86,7 @@ func frontendServiceName(v *examplecomv1alpha1.Memcached) string {
 }
 
 func (r *MemcachedReconciler) frontendService(m *examplecomv1alpha1.Memcached) *corev1.Service {
-	ls := labels("nginx")
+	ls := labels(m, "nginx")
 
 	s := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -137,7 +139,7 @@ func frontenDeploymentName(m *examplecomv1alpha1.Memcached) string {
 }
 
 func (r *MemcachedReconciler) deploymentForNginx(m *examplecomv1alpha1.Memcached) *appsv1.Deployment {
-	ls := labels("nginx")
+	ls := labels(m, "nginx")
 	replicas := m.Spec.Size
 
 	dep := &appsv1.Deployment{
@@ -185,4 +187,29 @@ func (r *MemcachedReconciler) deploymentForNginx(m *examplecomv1alpha1.Memcached
 	// Set Memcached instance as the owner and controller
 	ctrl.SetControllerReference(m, dep, r.Scheme)
 	return dep
+}
+
+func (r *MemcachedReconciler) checkSize(m *examplecomv1alpha1.Memcached) (*ctrl.Result, error) {
+
+	// See if deployment already exists and create if it doesn't
+	found := &appsv1.Deployment{}
+	err := r.Client.Get(context.TODO(), types.NamespacedName{
+		Name:      frontenDeploymentName(m),
+		Namespace: m.Namespace,
+	}, found)
+
+	size := m.Spec.Size
+	if *found.Spec.Replicas != size {
+		found.Spec.Replicas = &size
+		err = r.Update(context.TODO(), found)
+		if err != nil {
+			log.Error(err, "Failed to update Deployment", "Deployment.Namespace", m.Namespace, "Deployment.Name", m.Name)
+			return &ctrl.Result{}, err
+		}
+		// Spec updated - return and requeue
+		return &ctrl.Result{Requeue: true}, nil
+	}
+
+	return nil, nil
+
 }

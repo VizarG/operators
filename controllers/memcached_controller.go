@@ -19,10 +19,8 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"reflect"
+	_ "reflect"
 	"time"
-
-	// "github.com/jinzhu/copier"
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
@@ -32,9 +30,8 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	// metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/types"
+	_ "k8s.io/apimachinery/pkg/types"
 	// "k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -89,153 +86,79 @@ func (r *MemcachedReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 		// Error reading the object - requeue the request.
 		log.Error(err, "Failed to get Memcached")
-		// return ctrl.Result{}, err
-	}
-
-	// Check if the deployment already exists, if not create a new one
-	found := &appsv1.Deployment{}
-	err = r.Get(ctx, types.NamespacedName{Name: frontenDeploymentName(memcached), Namespace: memcached.Namespace}, found)
-	log.Info("new iteration")
-
-	if err != nil && errors.IsNotFound(err) {
-		//					NGINX
-		// Define a new deployment of nginx
-		depnginx := r.deploymentForNginx(memcached)
-		fmt.Println("depnginx = ", reflect.TypeOf(depnginx))
-		log.Info("Creating a new Deployment", "Deployment.Namespace", depnginx.Namespace, "Deployment.Name", depnginx.Name)
-		err = r.Create(ctx, depnginx)
-		if err != nil {
-			log.Error(err, "Failed to create new Deployment", "Deployment.Namespace", depnginx.Namespace, "Deployment.Name", depnginx.Name)
-			return ctrl.Result{}, err
-		}
-
-		//  Define new frontend service
-		servfront := r.frontendService(memcached)
-		log.Info("Creating a new Deployment", "Deployment.Namespace", servfront.Namespace, "Deployment.Name", servfront.Name)
-		err = r.Create(ctx, servfront)
-		if err != nil {
-			log.Error(err, "Failed to create new Deployment", "Deployment.Namespace", servfront.Namespace, "Deployment.Name", servfront.Name)
-			return ctrl.Result{}, err
-		}
-
-		//  Define new nginx config
-		ConfigMapFront := r.frontenConfigName(memcached)
-		log.Info("Creating a new ConfigMap", "Deployment.Namespace", ConfigMapFront.Namespace, "Deployment.Name", ConfigMapFront.Name)
-		err = r.Create(ctx, ConfigMapFront)
-		if err != nil {
-			log.Error(err, "Failed to create new ConfigMap for nginx", "Deployment.Namespace", ConfigMapFront.Namespace, "Deployment.Name", ConfigMapFront.Name)
-			return ctrl.Result{}, err
-		}
-
-		//						POSTGRES
-		// Define a new deployment of postgresql
-		depPostgres := r.postgresqlDeployment(memcached)
-		log.Info("Creating a new Deployment", "Deployment.Namespace", depPostgres.Namespace, "Deployment.Name", depPostgres.Name)
-		err = r.Create(ctx, depPostgres)
-		if err != nil {
-			log.Error(err, "Failed to create new Deployment", "Deployment.Namespace", depPostgres.Namespace, "Deployment.Name", depPostgres.Name)
-			return ctrl.Result{}, err
-		}
-
-		//  Define new postgresql service
-		servpostgres := r.PostgresqlService(memcached)
-		log.Info("Creating a new Deployment", "Deployment.Namespace", servpostgres.Namespace, "Deployment.Name", servpostgres.Name)
-		err = r.Create(ctx, servpostgres)
-		if err != nil {
-			log.Error(err, "Failed to create new Deployment", "Deployment.Namespace", servpostgres.Namespace, "Deployment.Name", servpostgres.Name)
-			return ctrl.Result{}, err
-		}
-
-		//  Define new postgresql secret
-		secretpostgres := r.postgresqlSecret(memcached)
-		log.Info("Creating a new secretpostgres", "Deployment.Namespace", secretpostgres.Namespace, "Deployment.Name", secretpostgres.Name)
-		err = r.Create(ctx, secretpostgres)
-		if err != nil {
-			log.Error(err, "Failed to create new Deployment", "Deployment.Namespace", secretpostgres.Namespace, "Deployment.Name", secretpostgres.Name)
-			return ctrl.Result{}, err
-		}
-
-		postgresqlRunning := r.isPostgresqlUp(memcached)
-
-		for postgresqlRunning != true {
-			if postgresqlRunning {
-				log.Info("Postgresql is running now")
-			} else {
-				time.Sleep(3 * time.Second)
-				postgresqlRunning = r.isPostgresqlUp(memcached)
-				log.Info(fmt.Sprintf("Postgresql isn't running, state is %v", postgresqlRunning))
-			}
-		}
-
-		//				PGADMIN
-		// Define a new deployment of pgadmin4
-		depPgamin := r.pgadminDeploymentName(memcached)
-		log.Info("Creating a new Deployment", "Deployment.Namespace", depPgamin.Namespace, "Deployment.Name", depPgamin.Name)
-		err = r.Create(ctx, depPgamin)
-		if err != nil {
-			log.Error(err, "Failed to create new Deployment", "Deployment.Namespace", depPgamin.Namespace, "Deployment.Name", depPgamin.Name)
-			return ctrl.Result{}, err
-		}
-
-		//  Define new pgadmin secret
-		secretpgadmin := r.pgadminSecret(memcached)
-		log.Info("Creating a new secretpgadmin", "Deployment.Namespace", secretpgadmin.Namespace, "Deployment.Name", secretpgadmin.Name)
-		err = r.Create(ctx, secretpgadmin)
-		if err != nil {
-			log.Error(err, "Failed to create new Deployment", "Deployment.Namespace", secretpgadmin.Namespace, "Deployment.Name", secretpgadmin.Name)
-			return ctrl.Result{}, err
-		}
-
-		//  Define new pgadmin service
-		servpgadmin := r.pgadminServiceName(memcached)
-		log.Info("Creating a new Deployment", "Deployment.Namespace", servpgadmin.Namespace, "Deployment.Name", servpgadmin.Name)
-		err = r.Create(ctx, servpgadmin)
-		if err != nil {
-			log.Error(err, "Failed to create new Deployment", "Deployment.Namespace", servpgadmin.Namespace, "Deployment.Name", servpgadmin.Name)
-			return ctrl.Result{}, err
-		}
-
-		// Deployment created successfully - return and requeue
-		return ctrl.Result{Requeue: true}, nil
-	} else if err != nil {
-		log.Error(err, "Failed to get Deployment")
 		return ctrl.Result{}, err
 	}
 
-	// Ensure the deployment size is the same as the spec
-	size := memcached.Spec.Size
-	if *found.Spec.Replicas != size {
-		found.Spec.Replicas = &size
-		err = r.Update(ctx, found)
-		if err != nil {
-			log.Error(err, "Failed to update Deployment", "Deployment.Namespace", found.Namespace, "Deployment.Name", found.Name)
-			return ctrl.Result{}, err
-		}
-		// Spec updated - return and requeue
-		return ctrl.Result{Requeue: true}, nil
+	var result *ctrl.Result
+
+	//						POSTGRES
+	// Define a new deployment of postgresql
+	result, err = r.ensureDeployment(req, memcached, r.postgresqlDeployment(memcached))
+	if result != nil {
+		return *result, err
+	}
+	//  Define new postgresql service
+	result, err = r.ensureService(req, memcached, r.PostgresqlService(memcached))
+	if result != nil {
+		return *result, err
+	}
+	//  Define new postgresql secret
+	result, err = r.ensureSecret(req, memcached, r.postgresqlSecret(memcached))
+	if result != nil {
+		return *result, err
 	}
 
-	// Update the Memcached status with the pod names
-	// List the pods for this memcached's deployment
-	podList := &corev1.PodList{}
-	listOpts := []client.ListOption{
-		client.InNamespace(memcached.Namespace),
-		client.MatchingLabels(labels(memcached.Name)),
-	}
-	if err = r.List(ctx, podList, listOpts...); err != nil {
-		log.Error(err, "Failed to list pods", "Memcached.Namespace", memcached.Namespace, "Memcached.Name", memcached.Name)
-		return ctrl.Result{}, err
-	}
-	podNames := getPodNames(podList.Items)
+	// check is postgresql is runnning
+	postgresqlRunning := r.isPostgresqlUp(memcached)
 
-	// Update status.Nodes if needed
-	if !reflect.DeepEqual(podNames, memcached.Status.Nodes) {
-		memcached.Status.Nodes = podNames
-		err := r.Status().Update(ctx, memcached)
-		if err != nil {
-			log.Error(err, "Failed to update Memcached status")
-			return ctrl.Result{}, err
+	for postgresqlRunning != true {
+		if postgresqlRunning {
+			log.Info("Postgresql is running now")
+		} else {
+			time.Sleep(3 * time.Second)
+			postgresqlRunning = r.isPostgresqlUp(memcached)
+			log.Info(fmt.Sprintf("Postgresql isn't running, state is %v", postgresqlRunning))
 		}
+	}
+
+	//					NGINX
+	// Define a new deployment of nginx
+	result, err = r.ensureDeployment(req, memcached, r.deploymentForNginx(memcached))
+	if result != nil {
+		return *result, err
+	}
+	//  Define new frontend service
+	result, err = r.ensureService(req, memcached, r.frontendService(memcached))
+	if result != nil {
+		return *result, err
+	}
+	//  Define new nginx config
+	result, err = r.ensureConfig(req, memcached, r.frontenConfigName(memcached))
+	if result != nil {
+		return *result, err
+	}
+
+	//  check number of replicas of nginx
+	result, err = r.checkSize(memcached)
+	if result != nil {
+		return *result, err
+	}
+
+	//				PGADMIN
+	// Define a new deployment of pgadmin4
+	result, err = r.ensureDeployment(req, memcached, r.pgadminDeploymentName(memcached))
+	if result != nil {
+		return *result, err
+	}
+	//  Define new pgadmin secret
+	result, err = r.ensureSecret(req, memcached, r.pgadminSecret(memcached))
+	if result != nil {
+		return *result, err
+	}
+	//  Define new pgadmin service
+	result, err = r.ensureService(req, memcached, r.pgadminServiceName(memcached))
+	if result != nil {
+		return *result, err
 	}
 
 	return ctrl.Result{}, nil
@@ -253,19 +176,10 @@ func (r *MemcachedReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-// labels returns the labels for selecting the resources
-// belonging to the given memcached CR name.
-func labels(name string) map[string]string {
-	return map[string]string{"app": "memcached", "memcached_cr": name}
-}
-
-// getPodNames returns the pod names of the array of pods passed in
-func getPodNames(pods []corev1.Pod) []string {
-	var podNames []string
-	for _, pod := range pods {
-		podNames = append(podNames, pod.Name)
-	}
-	return podNames
+func labels(m *examplecomv1alpha1.Memcached, name string) map[string]string {
+	return map[string]string{
+		"app":         m.Spec.Foo,
+		"part-of-app": name}
 }
 
 //

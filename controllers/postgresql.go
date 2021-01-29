@@ -20,10 +20,12 @@ import (
 	"context"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	// "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
+	// "time"
 
 	examplecomv1alpha1 "github.com/memcached-operator/api/v1alpha1"
 )
@@ -55,7 +57,7 @@ func postgresqlServiceName(m *examplecomv1alpha1.Memcached) string {
 }
 
 func (r *MemcachedReconciler) PostgresqlService(m *examplecomv1alpha1.Memcached) *corev1.Service {
-	ls := labels("postgres")
+	ls := labels(m, "postgres")
 
 	s := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -90,8 +92,8 @@ func postgresqlDeploymentName(m *examplecomv1alpha1.Memcached) string {
 }
 
 func (r *MemcachedReconciler) postgresqlDeployment(m *examplecomv1alpha1.Memcached) *appsv1.Deployment {
-	ls := labels("postgres")
-	replicas := m.Spec.Size
+	ls := labels(m, "postgres")
+	replicas := int32(1)
 
 	userSecret := corev1.EnvVarSource{
 		SecretKeyRef: &corev1.SecretKeySelector{
